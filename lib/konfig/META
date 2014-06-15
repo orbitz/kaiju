@@ -1,0 +1,6 @@
+name="konfig"
+version="1.0.0"
+description="ini-like parser library"
+requires="core"
+archive(byte)="konfig.cma"
+archive(native)="konfig.cmxa"
