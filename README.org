@@ -1,2 +1,2 @@
 * About
-Template for my usual ocaml projects
+Kaiju is a CP distributed sorted key-value store heavily inspired by BigTable

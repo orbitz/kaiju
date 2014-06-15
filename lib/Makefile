@@ -1,4 +1,4 @@
-SUBDIRS = example
+SUBDIRS = kaiju
 
 all_apps = $(SUBDIRS)
 
