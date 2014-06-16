@@ -48,8 +48,6 @@ let parse_string str =
     | Parse_failure line ->
       Error line
 
-let parse_file fname = failwith "nyi"
-
 let get k t =
   Konfig_map.find t k
 
