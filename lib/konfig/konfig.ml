@@ -46,9 +46,11 @@ let parse_string str =
     Ok konfig
   with
     | Parse_failure line ->
-      Error line
+      Error (`Parse_error line)
 
 let get k t =
-  Konfig_map.find t k
+  match Konfig_map.find t k with
+    | Some v -> Ok v
+    | None   -> Error (`Not_found k)
 
 let to_list = Konfig_map.to_alist
