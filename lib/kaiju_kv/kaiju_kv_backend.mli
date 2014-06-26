@@ -19,21 +19,20 @@ module Callbacks : sig
              }
   end
 
-  type c = { start     : Init_args.t -> (t, unit) Deferred.Result.t
-           ; put       : t -> Obj.t list -> (unit, string list) Deferred.Result.t
-           ; get       : t -> string list -> (Obj.t list, unit) Deferred.Result.t
-           ; get_range : t -> n:int -> (string * string) -> (Obj.t list, unit) Deferred.Result.t
-           ; delete    : t -> Obj.t list -> (unit, unit) Deferred.Result.t
+  type t = { put       : Obj.t list -> (unit, string list) Deferred.Result.t
+           ; get       : string list -> (Obj.t list, unit) Deferred.Result.t
+           ; get_range : n:int -> (string * string) -> (Obj.t list, unit) Deferred.Result.t
+           ; delete    : Obj.t list -> (unit, unit) Deferred.Result.t
            }
 
-  type t = c
+  type start = Init_args.t -> (t, unit) Deferred.Result.t
 end
 
 module Init_args : sig
-  type t = { log       : Zolog_std_event.t Zolog.t
-           ; config    : Konfig.t
-           ; base_key  : string list
-           ; callbacks : Callbacks.t
+  type t = { log      : Zolog_std_event.t Zolog.t
+           ; config   : Konfig.t
+           ; base_key : string list
+           ; start    : Callbacks.start
            }
 end
 
