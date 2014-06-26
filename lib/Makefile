@@ -1,4 +1,4 @@
-SUBDIRS = konfig kaiju
+SUBDIRS = konfig kaiju_kv kaiju
 
 all_apps = $(SUBDIRS)
 
@@ -18,7 +18,9 @@ test: $(subdirs_test)
 
 clean: $(subdirs_clean)
 
-kaiju: konfig
+kaiju: konfig kaiju_kv
+
+kaiju_kv: konfig
 
 $(SUBDIRS):
 	$(MAKE) -C $@ .d

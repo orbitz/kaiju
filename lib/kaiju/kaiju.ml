@@ -1,7 +1,7 @@
 open Core.Std
 open Async.Std
 
-type s = { log : Zolog_std_event.t Zolog.t; konfig : Konfig.t }
+type s = { log : Zolog_std_event.t Zolog.t; config : Konfig.t }
 
 module Flag = struct
   open Command.Spec
@@ -21,11 +21,11 @@ let level_of_string = function
   | "critical" -> Ok Zolog_std_event.Log.Critical
   | l          -> Error (`Invalid_log_level l)
 
-let create_console_handler konfig name =
+let create_console_handler config name =
   let read_options =
     let open Result.Monad_infix in
-    Konfig.get [logging; name; "min_level"] konfig >>= fun min_level_s ->
-    Konfig.get [logging; name; "max_level"] konfig >>= fun max_level_s ->
+    Konfig.get [logging; name; "min_level"] config >>= fun min_level_s ->
+    Konfig.get [logging; name; "max_level"] config >>= fun max_level_s ->
     level_of_string min_level_s                    >>= fun min_level ->
     level_of_string max_level_s                    >>= fun max_level ->
     Ok (min_level, max_level)
@@ -38,12 +38,12 @@ let create_console_handler konfig name =
   let handler = Zolog_std_event_console_backend.handler backend in
   Deferred.return (Ok handler)
 
-let create_file_handler konfig name =
+let create_file_handler config name =
   let read_options =
     let open Result.Monad_infix in
-    Konfig.get [logging; name; "min_level"] konfig >>= fun min_level_s ->
-    Konfig.get [logging; name; "max_level"] konfig >>= fun max_level_s ->
-    Konfig.get [logging; name; "dir"] konfig       >>= fun dir ->
+    Konfig.get [logging; name; "min_level"] config >>= fun min_level_s ->
+    Konfig.get [logging; name; "max_level"] config >>= fun max_level_s ->
+    Konfig.get [logging; name; "dir"] config       >>= fun dir ->
     level_of_string min_level_s                    >>= fun min_level ->
     level_of_string max_level_s                    >>= fun max_level ->
     Ok (min_level, max_level, dir)
@@ -57,15 +57,15 @@ let create_file_handler konfig name =
   let handler = Zolog_std_event_file_backend.handler backend in
   Deferred.return (Ok handler)
 
-let create_handler konfig name =
-  match Konfig.get [logging; name; "type"] konfig with
-    | Ok "console" -> create_console_handler konfig name
-    | Ok "file"    -> create_file_handler konfig name
+let create_handler config name =
+  match Konfig.get [logging; name; "type"] config with
+    | Ok "console" -> create_console_handler config name
+    | Ok "file"    -> create_file_handler config name
     | Ok ht        -> Deferred.return (Error (`Invalid_handler_type ht))
     | Error _      -> Deferred.return (Error (`Missing_handler_type name))
 
-let create_handlers konfig =
-  Deferred.return (Konfig.get [logging; "names"] konfig)
+let create_handlers config =
+  Deferred.return (Konfig.get [logging; "names"] config)
   >>=? fun loggers_raw ->
   let loggers =
     List.filter
@@ -73,15 +73,15 @@ let create_handlers konfig =
       (String.split ~on:' ' loggers_raw)
   in
   Deferred.List.map
-    ~f:(create_handler konfig)
+    ~f:(create_handler config)
     loggers
   >>= fun maybe_handlers ->
   Deferred.return (Result.all maybe_handlers)
 
-let start_log konfig =
+let start_log config =
   Zolog.start ()
   >>= fun logger ->
-  create_handlers konfig
+  create_handlers config
   >>=? fun handlers ->
   Deferred.List.map ~f:(Zolog.add_handler logger) handlers
   >>= fun _ ->
@@ -116,17 +116,25 @@ let print_message_and_exit err =
 let create_state config_file =
   let config = In_channel.read_all config_file in
   Deferred.return (Konfig.parse_string config)
-  >>=? fun konfig ->
-  start_log konfig
+  >>=? fun config ->
+  start_log config
   >>=? fun log ->
-  Deferred.return (Ok {log; konfig})
+  Deferred.return (Ok {log; config})
 
 let started state =
   Zolog_event.info
-    ~n:["kaiju"; "main"; "started"]
+    ~n:["kaiju"; "main"; "start"]
     ~o:"kaiju_main"
     state.log
     "Kaiju started"
+  >>= fun _ ->
+  Kaiju_kv.start
+    { Kaiju_kv.log        = state.log
+    ;          base       = ["storage"]
+    ;          config     = state.config
+    ;          backends   = []
+    ;          transports = []
+    }
   >>= fun _ ->
   Zolog.sync state.log
   >>= fun _ ->
