@@ -1,0 +1,6 @@
+name="kaiju_kv"
+version="1.0.0"
+description="KV Interface for Kaiju"
+requires="core,async,zolog,konfig"
+archive(byte)="kaiju_kv.cma"
+archive(native)="kaiju_kv.cmxa"
