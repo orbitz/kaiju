@@ -14,17 +14,10 @@ end
 let logging = "logging"
 
 let kaiju_kv_backends =
-  let module Kvbc = Kaiju_kv_backend.Callbacks in
-  let module Kvmb = Kaiju_kv_memory_backend in
-  [ ("memory", { Kvbc.start     = Kvmb.start
-               ;      put       = Kvmb.put
-               ;      get       = Kvmb.get
-               ;      get_range = Kvmb.get_range
-               ;      delete    = Kvmb.delete
-               })
-  ]
+  [ ("memory", Kaiju_kv_memory_backend.start) ]
 
-let kaiju_kv_transports = []
+let kaiju_kv_transports =
+  [ ("line", Kaiju_kv_line_transport.start) ]
 
 let level_of_string = function
   | "debug"    -> Ok Zolog_std_event.Log.Debug

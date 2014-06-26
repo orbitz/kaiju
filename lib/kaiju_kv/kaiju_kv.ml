@@ -4,8 +4,8 @@ open Async.Std
 type init_args = { log        : Zolog_std_event.t Zolog.t
                  ; base       : string list
                  ; config     : Konfig.t
-                 ; backends   : (string * Kaiju_kv_backend.Callbacks.t) list
-                 ; transports : (string * Kaiju_kv_transport.Callbacks.t) list
+                 ; backends   : (string * Kaiju_kv_backend.Callbacks.start) list
+                 ; transports : (string * Kaiju_kv_transport.Callbacks.start) list
                  }
 
 let origin = "kaiju_kv"
@@ -60,19 +60,19 @@ let lookup_transport init_args =
 let start_kv init_args backend_cb transport_cb =
   let module Kvb = Kaiju_kv_backend in
   let module Kvt = Kaiju_kv_transport in
-  let backend_init_args = { Kvb.Init_args.log       = init_args.log
-                          ;               config    = init_args.config
-                          ;               base_key  = init_args.base @ ["backend"]
-                          ;               callbacks = backend_cb
+  let backend_init_args = { Kvb.Init_args.log      = init_args.log
+                          ;               config   = init_args.config
+                          ;               base_key = init_args.base @ ["backend"]
+                          ;               start    = backend_cb
                           }
   in
   Kaiju_kv_backend.start backend_init_args
   >>=? fun backend ->
-  let transport_init_args = { Kvt.Init_args.log       = init_args.log
-                            ;               config    = init_args.config
-                            ;               base_key  = init_args.base @ ["transport"]
-                            ;               backend   = backend
-                            ;               callbacks = transport_cb
+  let transport_init_args = { Kvt.Init_args.log      = init_args.log
+                            ;               config   = init_args.config
+                            ;               base_key = init_args.base @ ["transport"]
+                            ;               backend  = backend
+                            ;               start    = transport_cb
                             }
   in
   Kaiju_kv_transport.start transport_init_args

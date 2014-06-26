@@ -1,0 +1,6 @@
+name="kaiju_kv_line_transport"
+version="1.0.0"
+description="Simple line transport for Kaiju_kv"
+requires="core,async,zolog,konfig,kaiju_kv"
+archive(byte)="kaiju_kv_line_transport.cma"
+archive(native)="kaiju_kv_line_transport.cmxa"
