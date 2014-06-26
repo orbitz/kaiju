@@ -5,10 +5,10 @@ type t
 module Obj : sig
   type t
 
-  val create      : k:string -> v:string -> c:string -> t
+  val create      : k:string -> v:string -> c:string option -> t
   val get_key     : t -> string
   val get_value   : t -> string
-  val get_context : t -> string
+  val get_context : t -> string option
 end
 
 module Callbacks : sig

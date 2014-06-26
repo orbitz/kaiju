@@ -4,7 +4,7 @@ open Async.Std
 module Obj = struct
   type t = { key     : string
            ; value   : string
-           ; context : string
+           ; context : string option
            }
 
   let create ~k ~v ~c = { key = k; value = v; context = c }
