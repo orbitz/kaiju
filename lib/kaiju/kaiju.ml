@@ -143,8 +143,6 @@ let started state =
     }
   >>= fun _ ->
   Zolog.sync state.log
-  >>= fun _ ->
-  Deferred.return (shutdown 0)
 
 let run_start config_file =
   create_state config_file
