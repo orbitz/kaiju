@@ -1,0 +1,6 @@
+name="kaiju_kv_memory_backend"
+version="1.0.0"
+description="Memory backend for Kaiju_kv"
+requires="core,async,zolog,konfig,kaiju_kv"
+archive(byte)="kaiju_kv_memory_backend.cma"
+archive(native)="kaiju_kv_memory_backend.cmxa"
