@@ -13,6 +13,19 @@ end
 
 let logging = "logging"
 
+let kaiju_kv_backends =
+  let module Kvbc = Kaiju_kv_backend.Callbacks in
+  let module Kvmb = Kaiju_kv_memory_backend in
+  [ ("memory", { Kvbc.start     = Kvmb.start
+               ;      put       = Kvmb.put
+               ;      get       = Kvmb.get
+               ;      get_range = Kvmb.get_range
+               ;      delete    = Kvmb.delete
+               })
+  ]
+
+let kaiju_kv_transports = []
+
 let level_of_string = function
   | "debug"    -> Ok Zolog_std_event.Log.Debug
   | "info"     -> Ok Zolog_std_event.Log.Info
@@ -132,8 +145,8 @@ let started state =
     { Kaiju_kv.log        = state.log
     ;          base       = ["storage"]
     ;          config     = state.config
-    ;          backends   = []
-    ;          transports = []
+    ;          backends   = kaiju_kv_backends
+    ;          transports = kaiju_kv_transports
     }
   >>= fun _ ->
   Zolog.sync state.log

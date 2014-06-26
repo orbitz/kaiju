@@ -16,9 +16,19 @@ let log_message_and_exit log err =
       sprintf
         "Storage config key not found: %s"
         (String.concat ~sep:"." k)
+    | `Unknown_backend backend_type ->
+      sprintf
+        "Unknown backend type: %s"
+        backend_type
+    | `Unknown_transport transport_type ->
+      sprintf
+        "Unknown transport type: %s"
+        transport_type
+    | `Failed_to_start ->
+      "Failed to start backend or transport"
   in
-  Zolog_event.info
-    ~n:["kiaju"; "kv"; "start"]
+  Zolog_event.error
+    ~n:["kaiju"; "kv"; "start"]
     ~o:origin
     log
     (string_of_err err)
@@ -26,8 +36,6 @@ let log_message_and_exit log err =
   Zolog.sync log
   >>= fun _ ->
   Deferred.return (shutdown 1)
-
-let log_start_error_and_exit log err = failwith "nyi"
 
 let lookup_backend init_args =
   let open Result.Monad_infix in
@@ -79,9 +87,12 @@ let do_start init_args =
     lookup_transport init_args >>= fun transport_cb ->
     Ok (backend_cb, transport_cb)
   in
-  match backend_transport with
-    | Ok (backend_cb, transport_cb) -> start_kv init_args backend_cb transport_cb
-    | Error err                     -> log_start_error_and_exit init_args.log err
+  Deferred.return backend_transport
+  >>=? fun (backend_cb, transport_cb) ->
+  start_kv init_args backend_cb transport_cb
+  >>= function
+    | Ok ()    -> Deferred.return (Ok ())
+    | Error () -> Deferred.return (Error `Failed_to_start)
 
 let start init_args =
   do_start init_args
@@ -96,5 +107,4 @@ let start init_args =
       Deferred.unit
     end
     | Error err ->
-      failwith "nyi"
-      (* log_message_and_exit init_args.log err *)
+      log_message_and_exit init_args.log err
