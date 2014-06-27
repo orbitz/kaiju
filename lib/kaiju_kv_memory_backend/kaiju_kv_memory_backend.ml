@@ -5,6 +5,8 @@ module Obj = Kaiju_kv_backend.Obj
 
 type t = { mutable db : (string * int) String.Map.t }
 
+let origin = "kaiju_kv_memory_backend"
+
 let put t objs =
   let (errors, db) =
     List.fold_left
@@ -72,6 +74,12 @@ let delete t objs = failwith "nyi"
 let start init_args =
   let module Kvb = Kaiju_kv_backend.Callbacks in
   let t = { db = String.Map.empty } in
+  Zolog_event.info
+    ~n:["kaiju"; "kv"; "backend"; "memory"; "start"]
+    ~o:origin
+    init_args.Kvb.Init_args.log
+    "Started key-value memory backend"
+  >>= fun _ ->
   Deferred.return (Ok { Kvb.put    = put t
                       ;     first  = first t
                       ;     next   = next t
