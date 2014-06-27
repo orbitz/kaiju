@@ -1,4 +1,4 @@
-export OCAMLPATH:=$(PWD)/lib:$(OCAMLPATH)
+export OCAMLPATH:=$(shell pwd)/lib:$(OCAMLPATH)
 
 .PHONY: all clean test examples install
 
