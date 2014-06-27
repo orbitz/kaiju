@@ -19,9 +19,30 @@ module Server = struct
           writer
           (String.concat
              ~sep:" "
-             [Obj.get_key obj; Obj.get_value obj]);
+             [ Obj.get_key obj
+             ; Obj.get_value obj
+             ; Option.value (Obj.get_context obj) ~default:"unknown"
+             ]);
         Writer.write writer "\n")
       objs
+
+  let put state key value context =
+    let obj = Obj.create ~k:key ~v:value ~c:context in
+    Kaiju_kv_backend.put
+      state.backend
+      [obj]
+    >>= function
+      | Ok () ->
+        Deferred.return (Ok ())
+      | Error errors -> begin
+        List.iter
+          ~f:(fun key ->
+            Writer.write
+              state.writer
+              (key ^ "\n"))
+          errors;
+        Deferred.return (Ok ())
+      end
 
   let handle_line state line =
     match String.split ~on:' ' line with
@@ -34,15 +55,10 @@ module Server = struct
         Deferred.return (Ok ())
       end
       | ["PUT"; key; value] -> begin
-        let obj = Obj.create ~k:key ~v:value ~c:None in
-        Kaiju_kv_backend.put
-          state.backend
-          [obj]
-        >>= fun _ ->
-        Deferred.return (Ok ())
+        put state key value None
       end
       | ["PUT"; key; context; value] ->
-        Deferred.return (Ok ())
+        put state key value (Some context)
       | _ ->
         Deferred.return (Error ())
 

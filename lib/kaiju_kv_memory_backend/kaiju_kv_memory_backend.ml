@@ -3,21 +3,37 @@ open Async.Std
 
 module Obj = Kaiju_kv_backend.Obj
 
-type t = { mutable db : (string * string) String.Map.t }
+type t = { mutable db : (string * int) String.Map.t }
 
 let put t objs =
-  let db =
+  let (errors, db) =
     List.fold_left
-      ~f:(fun db obj ->
-        Map.add
-          ~key:(Obj.get_key obj)
-          ~data:(Obj.get_value obj, Option.value (Obj.get_context obj) ~default:"")
-          db)
-      ~init:t.db
+      ~f:(fun (errors, db) obj ->
+        let ctx = Int.of_string (Option.value (Obj.get_context obj) ~default:"0") in
+        match Map.find t.db (Obj.get_key obj) with
+          | Some (value, context) when ctx = context ->
+            (errors,
+             Map.add
+               ~key:(Obj.get_key obj)
+               ~data:(Obj.get_value obj, ctx + 1)
+               db)
+          | Some _ ->
+            ((Obj.get_key obj)::errors, db)
+          | None ->
+            (errors,
+             Map.add
+               ~key:(Obj.get_key obj)
+               ~data:(Obj.get_value obj, ctx + 1)
+               db))
+      ~init:([], t.db)
       objs
   in
   t.db <- db;
-  Deferred.return (Ok ())
+  match errors with
+    | [] ->
+      Deferred.return (Ok ())
+    | errors ->
+      Deferred.return (Error errors)
 
 let get t keys =
   let objs =
@@ -25,7 +41,7 @@ let get t keys =
       ~f:(fun objs key ->
         match Map.find t.db key with
           | Some (value, context) ->
-            (Obj.create ~k:key ~v:value ~c:(Some context))::objs
+            (Obj.create ~k:key ~v:value ~c:(Some (Int.to_string context)))::objs
           | None ->
             objs)
       ~init:[]
