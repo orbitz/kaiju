@@ -13,7 +13,7 @@ examples: all
 	$(MAKE) -C examples
 
 install: all
-	$(MAKE) -C lib install
+	$(MAKE) -C lib/kaiju install
 
 clean:
 	$(MAKE) -C lib clean
