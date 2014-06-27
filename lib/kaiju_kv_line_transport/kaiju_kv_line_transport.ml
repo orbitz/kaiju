@@ -46,14 +46,57 @@ module Server = struct
 
   let handle_line state line =
     match String.split ~on:' ' line with
-      | ["GET"; key] -> begin
-        Kaiju_kv_backend.get
+      | ["FIRST"; start] -> begin
+        Kaiju_kv_backend.first
           state.backend
-          [key]
+          ~n:1
+          start
         >>=? fun objs ->
         write_objs state.writer objs;
         Deferred.return (Ok ())
       end
+      | ["FIRST"; n; start] ->
+        Kaiju_kv_backend.first
+          state.backend
+          ~n:(Int.of_string n)
+          start
+        >>=? fun objs ->
+        write_objs state.writer objs;
+        Deferred.return (Ok ())
+      | ["FIRST"; n; start; stop] ->
+        Kaiju_kv_backend.first
+          state.backend
+          ~n:(Int.of_string n)
+          ~stop
+          start
+        >>=? fun objs ->
+        write_objs state.writer objs;
+        Deferred.return (Ok ())
+      | ["NEXT"; start] ->
+        Kaiju_kv_backend.next
+          state.backend
+          ~n:1
+          start
+        >>=? fun objs ->
+        write_objs state.writer objs;
+        Deferred.return (Ok ())
+      | ["NEXT"; n; start] ->
+        Kaiju_kv_backend.next
+          state.backend
+          ~n:(Int.of_string n)
+          start
+        >>=? fun objs ->
+        write_objs state.writer objs;
+        Deferred.return (Ok ())
+      | ["NEXT"; n; start; stop] ->
+        Kaiju_kv_backend.next
+          state.backend
+          ~n:(Int.of_string n)
+          ~stop
+          start
+        >>=? fun objs ->
+        write_objs state.writer objs;
+        Deferred.return (Ok ())
       | ["PUT"; key; value] -> begin
         put state key value None
       end

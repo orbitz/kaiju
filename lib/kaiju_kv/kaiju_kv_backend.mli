@@ -19,10 +19,10 @@ module Callbacks : sig
              }
   end
 
-  type t = { put       : Obj.t list -> (unit, string list) Deferred.Result.t
-           ; get       : string list -> (Obj.t list, unit) Deferred.Result.t
-           ; get_range : n:int -> (string * string) -> (Obj.t list, unit) Deferred.Result.t
-           ; delete    : Obj.t list -> (unit, unit) Deferred.Result.t
+  type t = { put    : Obj.t list -> (unit, string list) Deferred.Result.t
+           ; first  : ?stop:string -> n:int -> string -> (Obj.t list, unit) Deferred.Result.t
+           ; next   : ?stop:string -> n:int -> string -> (Obj.t list, unit) Deferred.Result.t
+           ; delete : Obj.t list -> (unit, unit) Deferred.Result.t
            }
 
   type start = Init_args.t -> (t, unit) Deferred.Result.t
@@ -36,8 +36,8 @@ module Init_args : sig
            }
 end
 
-val start     : Init_args.t -> (t, unit) Deferred.Result.t
-val put       : t -> Obj.t list -> (unit, string list) Deferred.Result.t
-val get       : t -> string list -> (Obj.t list, unit) Deferred.Result.t
-val get_range : t -> n:int -> (string * string) -> (Obj.t list, unit) Deferred.Result.t
-val delete    : t -> Obj.t list -> (unit, unit) Deferred.Result.t
+val start  : Init_args.t -> (t, unit) Deferred.Result.t
+val put    : t -> Obj.t list -> (unit, string list) Deferred.Result.t
+val first  : t -> ?stop:string -> n:int -> string -> (Obj.t list, unit) Deferred.Result.t
+val next   : t -> ?stop:string -> n:int -> string -> (Obj.t list, unit) Deferred.Result.t
+val delete : t -> Obj.t list -> (unit, unit) Deferred.Result.t

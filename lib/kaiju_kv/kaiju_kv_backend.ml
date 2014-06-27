@@ -22,10 +22,10 @@ module Callbacks = struct
              }
   end
 
-  type t = { put       : Obj.t list -> (unit, string list) Deferred.Result.t
-           ; get       : string list -> (Obj.t list, unit) Deferred.Result.t
-           ; get_range : n:int -> (string * string) -> (Obj.t list, unit) Deferred.Result.t
-           ; delete    : Obj.t list -> (unit, unit) Deferred.Result.t
+  type t = { put    : Obj.t list -> (unit, string list) Deferred.Result.t
+           ; first  : ?stop:string -> n:int -> string -> (Obj.t list, unit) Deferred.Result.t
+           ; next   : ?stop:string -> n:int -> string -> (Obj.t list, unit) Deferred.Result.t
+           ; delete : Obj.t list -> (unit, unit) Deferred.Result.t
            }
 
   type start = Init_args.t -> (t, unit) Deferred.Result.t
@@ -51,18 +51,18 @@ let start init_args =
   >>=? fun callbacks ->
   Deferred.return (Ok { callbacks })
 
-let put t objs =
+let put t =
   let module Cb = Callbacks in
-  t.callbacks.Cb.put objs
+  t.callbacks.Cb.put
 
-let get t keys =
+let first t =
   let module Cb = Callbacks in
-  t.callbacks.Cb.get keys
+  t.callbacks.Cb.first
 
-let get_range t ~n range =
+let next t =
   let module Cb = Callbacks in
-  t.callbacks.Cb.get_range ~n range
+  t.callbacks.Cb.next
 
-let delete t objs =
+let delete t =
   let module Cb = Callbacks in
-  t.callbacks.Cb.delete objs
+  t.callbacks.Cb.delete

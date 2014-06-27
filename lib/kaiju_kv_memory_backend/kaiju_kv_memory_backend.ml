@@ -35,28 +35,45 @@ let put t objs =
     | errors ->
       Deferred.return (Error errors)
 
-let get t keys =
-  let objs =
-    List.fold_left
-      ~f:(fun objs key ->
-        match Map.find t.db key with
-          | Some (value, context) ->
-            (Obj.create ~k:key ~v:value ~c:(Some (Int.to_string context)))::objs
-          | None ->
-            objs)
-      ~init:[]
-      keys
-  in
-  Deferred.return (Ok objs)
+let is_leq_than_stop key = function
+  | Some stop -> String.compare key stop <= 0
+  | None      -> true
 
-let get_range t ~n (kstart, kend) = failwith "nyi"
+let rec do_next acc t ~stop ~n start =
+  if n > 0 then begin
+    match Map.next_key t.db start with
+      | Some (key, (value, context)) when is_leq_than_stop key stop ->
+        let acc' =
+          (Obj.create ~k:key ~v:value ~c:(Some (Int.to_string context)))::acc
+        in
+        do_next acc' t ~stop ~n:(n - 1) key
+      | Some _ | None ->
+        List.rev acc
+  end
+  else
+    List.rev acc
+
+let first t ?stop ~n start =
+  match Map.find t.db start with
+    | Some (value, context) ->
+      let acc =
+        [Obj.create ~k:start ~v:value ~c:(Some (Int.to_string context))]
+      in
+      Deferred.return (Ok (do_next acc t ~stop ~n:(n - 1) start))
+    | None ->
+      Deferred.return (Ok (do_next [] t ~stop ~n start))
+
+
+let next t ?stop ~n start =
+  Deferred.return (Ok (do_next [] t ~stop ~n start))
+
 let delete t objs = failwith "nyi"
 
 let start init_args =
   let module Kvb = Kaiju_kv_backend.Callbacks in
   let t = { db = String.Map.empty } in
-  Deferred.return (Ok { Kvb.put       = put t
-                      ;     get       = get t
-                      ;     get_range = get_range t
-                      ;     delete    = delete t
+  Deferred.return (Ok { Kvb.put    = put t
+                      ;     first  = first t
+                      ;     next   = next t
+                      ;     delete = delete t
                       })
