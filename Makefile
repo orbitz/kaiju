@@ -1,4 +1,4 @@
-export OCAMLPATH:=$(PWD)/lib:$(OCAMLPATH)
+export OCAMLPATH:=$(shell pwd)/lib:$(OCAMLPATH)
 
 .PHONY: all clean test examples install
 
@@ -13,7 +13,7 @@ examples: all
 	$(MAKE) -C examples
 
 install: all
-	$(MAKE) -C lib install
+	$(MAKE) -C lib/kaiju install
 
 clean:
 	$(MAKE) -C lib clean
