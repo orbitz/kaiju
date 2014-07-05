@@ -28,8 +28,7 @@ kaiju_kv_line_transport: kaiju_kv
 
 $(SUBDIRS):
 	$(MAKE) -C $@ .d
-	$(MAKE) -C $@ native-code
-	$(MAKE) -C $@ byte-code
+	$(MAKE) -C $@
 
 $(subdirs_install):
 	$(MAKE) -C $(patsubst %_install,%,$@) install
