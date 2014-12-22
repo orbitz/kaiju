@@ -1,0 +1,6 @@
+name="kaiju_kv_scow_backend"
+version="1.0.0"
+description="Scow backend for Kaiju_kv"
+requires="core,async,zolog,konfig,kaiju_kv,kaiju_kv_memory_backend,scow,scow_transport_stream,scow_transport_stream_codec_json,json-wheel"
+archive(byte)="kaiju_kv_scow_backend.cma"
+archive(native)="kaiju_kv_scow_backend.cmxa"

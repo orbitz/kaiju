@@ -36,10 +36,11 @@ module Server = struct
         Deferred.return (Ok ())
       | Error errors -> begin
         List.iter
-          ~f:(fun key ->
+          ~f:(fun err ->
+            printf "Error: %s\n%!" err;
             Writer.write
               state.writer
-              (key ^ "\n"))
+              (err ^ "\n"))
           errors;
         Deferred.return (Ok ())
       end
@@ -160,6 +161,7 @@ let do_start init_args =
   get_port init_args >>=? fun port ->
   ignore (Tcp.Server.create
             (Tcp.on_port port)
+            ~on_handler_error:`Ignore
             (Server.start init_args));
   Deferred.return (Ok ())
 

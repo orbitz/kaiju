@@ -14,7 +14,9 @@ end
 let logging = "logging"
 
 let kaiju_kv_backends =
-  [ ("memory", Kaiju_kv_memory_backend.start) ]
+  [ ("memory", Kaiju_kv_memory_backend.start)
+  ; ("scow",   Kaiju_kv_scow_backend.start)
+  ]
 
 let kaiju_kv_transports =
   [ ("line", Kaiju_kv_line_transport.start) ]

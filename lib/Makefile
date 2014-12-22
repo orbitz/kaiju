@@ -1,4 +1,4 @@
-SUBDIRS = konfig kaiju_kv kaiju kaiju_kv_memory_backend kaiju_kv_line_transport
+SUBDIRS = konfig kaiju_kv kaiju kaiju_kv_memory_backend kaiju_kv_line_transport kaiju_kv_scow_backend
 
 all_apps = $(SUBDIRS)
 
@@ -18,13 +18,19 @@ test: $(subdirs_test)
 
 clean: $(subdirs_clean)
 
-kaiju: konfig kaiju_kv kaiju_kv_memory_backend kaiju_kv_line_transport
+kaiju: konfig kaiju_kv
+
+kaiju: kaiju_kv_line_transport
+
+kaiju: kaiju_kv_memory_backend kaiju_kv_scow_backend
 
 kaiju_kv: konfig
 
 kaiju_kv_memory_backend: kaiju_kv
 
 kaiju_kv_line_transport: kaiju_kv
+
+kaiju_kv_scow_backend: kaiju_kv_memory_backend kaiju_kv
 
 $(SUBDIRS):
 	$(MAKE) -C $@ .d
