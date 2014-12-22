@@ -1,6 +1,7 @@
 CAMLP4=
 
-PACKAGES=core,async,zolog,konfig,kaiju_kv_memory_backend,kaiju_kv_line_transport,kaiju_kv
+BACKENDS=kaiju_kv_memory_backend,kaiju_kv_scow_backend
+PACKAGES=core,async,zolog,konfig,$(BACKENDS),kaiju_kv_line_transport,kaiju_kv
 
 OCAMLDEP_OPTS=-package $(PACKAGES)
 OCAMLC_OPTS=$(OCAMLDEP_OPTS) -w '@f@p@u@s@40'
@@ -16,6 +17,8 @@ EXTERNAL_DEPS= \
 	../kaiju_kv/kaiju_kv.cma \
 	../kaiju_kv_memory_backend/kaiju_kv_memory_backend.cmxa \
 	../kaiju_kv_memory_backend/kaiju_kv_memory_backend.cma \
+	../kaiju_kv_scow_backend/kaiju_kv_scow_backend.cmxa \
+	../kaiju_kv_scow_backend/kaiju_kv_scow_backend.cma \
 	../kaiju_kv_line_transport/kaiju_kv_line_transport.cmxa \
 	../kaiju_kv_line_transport/kaiju_kv_line_transport.cma
 
