@@ -1,2 +1,441 @@
+#+AUTHOR: orbitz
+#+OPTIONS: toc:2
+#+LATEX_HEADER: \usepackage{xcolor}
+#+LATEX_HEADER: \usepackage{hyperref}
+#+LATEX_HEADER: \hypersetup{colorlinks=true,urlcolor=blue,linkcolor=black}
+
 * About
-Kaiju is a CP distributed sorted key-value store heavily inspired by BigTable
+Kaiju is a distributed database inspired by [[http://www.mpi-sws.org/~druschel/courses/ds/papers/cooper-pnuts.pdf][PNUTS]] and [[http://cassandra.apache.org/][Cassandra]].  This
+implementation is meant to be a PoC and a learning project, not a production
+database.
+
+The novel contribution of Kaiju is a tunable latency model.  Latency is
+indirectly tuned by adjusting the consistency.  Tables have a consistency
+setting and individual operations can specify a higher consistency than the
+table setting.
+* Design Philosophy
+#+BEGIN_QUOTE
+Complexity through the interaction of simple components.
+#+END_QUOTE
+* Design
+** Nodes
+A node is roughly another name for a machine.  It is possible that multiple
+nodes are actually the same physical machine.
+** Tables
+All data is stored in tables.  Tables consist of a number of columns with a
+partition key.  Each partition key has a number of rows associated with it.
+Each row has a type associated with it.
+** Tablets
+Tables are broken into tablets.  Entries in a tablet are ordered.  Tablets are
+roughly equal size and can be split and merged as needed to maintain the size.
+Tablets are maintained at some replication factor.  They can be moved between
+nodes and the replication factor adjusted if needed.  Multiple replicants of a
+tablet will not be on the same node.
+** Partitions
+Data is stored in tables by a primary key.  A primary key is composed of a
+partition key and an ordering key.  Both the partition key and the ordering key
+can be composed of multiple columns in the table definition.  The ordering key
+is appended to the partition key to create the primary key.  The partition key
+is used to determine which tablets to place the partition on and the ordering
+key defines the ordering within that partition.  Range searches inside of a
+partition are possible but not between partitions.
+
+To create a table that mimics a standard key-value database, named ~example_kv~:
+
+#+BEGIN_EXAMPLE
+name = "example_kv"
+
+[[columns]]
+name = "key"
+type = "string"
+
+[[columns]]
+name = "data"
+type = "string"
+
+[primary_key]
+partition = ["key"]
+#+END_EXAMPLE
+
+To create a table that can be used to store time series data, named ~metrics~:
+
+#+BEGIN_EXAMPLE
+name = "metrics"
+
+[[columns]]
+name = "machine"
+type = "string"
+
+[[columns]]
+name = "metric"
+type = "string"
+
+[[columns]]
+name = "ts"
+type = "timestamp"
+
+[[columns]]
+name = "value"
+type = "int"
+
+[primary_key]
+partition = ["machine", "metric"]
+ordering = ["ts"]
+#+END_EXAMPLE
+
+The ~metrics~ table maps keys of the form ~(machine, metric, ts)~ to an integer
+value.  The series data can also be accessed by using the key ~(machine,
+metric)~ and a range search on ~ts~.
+** Partition mastership
+Kaiju supports multiple clusters and each partition has a master cluster.  A
+master cluster is one in which all strongly consistent operations must go
+through.  Mastership of partitions can be moved between clusters.  Each table
+has an master cluster and the creation of new partitions goes through the owning
+cluster.  Changing of mastership of a partition is a globally strong consistent
+operation even if the operations on the partition do not require global strong
+consistency.
+** Datatypes
+Kaiju supports multiple datatypes, some are more restrictive than others.  The
+tentative list looks like:
+
+- autogen (automatically generated value, guaranteed to be globally unique)
+- string
+- int
+- timestamp
+- set
+- map
+- counter
+- CRDT set
+- CRDT map
+- CRDT counter
+** Latency/Consistency
+The latency of operations in Kaiju is tunable indirectly by modifying
+consistency settings for a table.  Individual operations may have stronger
+consistency guarantees than the table but never less.  Some consistency settings
+put limitations on the datatypes in columns.
+
+*** Global strong consistency
+Global strong consistency is the highest latency.  All operations are
+synchronously replicated to a quorum of participating nodes.  If there are
+multiple clusters, the operation is synchronously replicated to a quorum of
+clusters.
+
+Data is the most flexible and can be of any type.
+*** Local strong consistency
+Operations are synchronously replicated to a quorum of nodes in the master
+cluster however asynchronously replicated to all other participating clusters.
+The partition master must be available in order to change ownership.
+
+Data is as flexible as ~global strong consistency~.
+*** Eventual consistency
+Operations on eventually consistent tables has the most flexibility on latency.
+Operations can succeed when they have been acknowledged on only one node.
+Tables that are eventually consistent do not check mastership unless the
+operation requires stronger consistency guarantees.
+
+Eventually consistent tables have the least flexibility in data.  All data must
+be a CRDT.  By being a CRDT, conflicts can be resolved by the database.
+*** Autogenerated keys
+By having a column of the ~autogen~ type, the creation of new entries can have
+low latency even on tables with strong consistency.  An ~autogen~ column must be
+part of the ordering key.  The metric table revisited such that writes can
+happen at any cluster with low latency:
+
+#+BEGIN_EXAMPLE
+name = "metrics"
+
+[[columns]]
+name = "machine"
+type = "string"
+
+[[columns]]
+name = "metric"
+type = "string"
+
+[[columns]]
+name = "ts"
+type = "timestamp"
+
+[[columns]]
+name = "autogen"
+type = "autogen"
+
+[[columns]]
+name = "value"
+type = "int"
+
+[primary_key]
+partition = ["machine", "metric"]
+ordering = ["ts", "autogen"]
+#+END_EXAMPLE
+** Replicators
+Data can be replicated between nodes in the cluster with differing levels of
+consistency.  Replicators implement the necessary level of consistency.  A
+replicator is chosen at the operation level.
+** Local computation
+Kaiju supports the installation of server-side code that allows arbitrary
+transformation of data on the node serving the request.  Installing code is a
+strongly consistent operation and the code has a unique name allowing multiple
+versions of the code to exist in parallel.
+** Batching
+Kaiju encourages batching operations in order to reduce the number of round
+trips to the database.  Each element in a batch can be given operation specific
+parameters and Kaiju will do it's best the batch is executed efficiently.  A
+batch can partially fail, the response will contain the results of any ~GET~
+operations as well as failures.  A successful ~PUT~ and ~DELETE~ will not be
+represented in the response.
+
+Batches are not transactions and provide no guarantees similar to transactions.
+Batches can partially succeed.
+** Transactions
+Transactions is undecided.  It is ideal to offer transactions on partitions
+which have higher consistency but how to do this is unclear.
+* Architecture
+The [[Design][Design]] section of this document describes the database abstractly.  This
+section provides this concrete implementation.
+** Tablet
+*** Description
+A tablet is the unit of storage.  It stores keys mapped to values.  Keys are
+always stored in lexicographic order.  Both keys and values are sequences of
+bytes.  All tablets are completely independent of each other and tablets are not
+aware of their replicants.
+
+Tablet should scale to hundred of thousands of tablets per cluster.
+*** API
+  :PROPERTIES:
+  :CUSTOM_ID: tablet-api
+  :END:
+- ~EXEC id gets puts deletes opts~ - Execute a list of operations.  The
+  operations are executed in the order of ~gets~ then ~puts~ then ~deletes~.
+  The ~opts~ parameter contains the default options for each individual
+  operation and individual operations can specify an overriding set of options.
+  The ~id~ parameter is a client-given unique identifier for the operation.  The
+  client can issue multiple ~EXEC~ operations on the same socket and the
+  responses will be returned asynchronously containing the given identifier.  It
+  is up to the client to ensure the identifiers are unique for that connection
+  but they do not need to be globally unique.
+- ~GET_SIZE~ - Returns the current best estimate of the size of the tablet.
+
+The following operations are executed by ~EXEC~:
+- ~GET start stop count opts~ - Either ~stop~ or ~count~ is required.  If both
+  are given, whichever predicate becomes false first ends the operation.  The
+  ~GET~ will fail if ~count~ is not greater than 0.
+- ~PUT key value opts~
+- ~DELETE start stop opts~ - ~stop~ is assumed to be equal to ~start~ unless
+  otherwise specified.
+
+An example ~EXEC~ request:
+
+#+BEGIN_EXAMPLE
+operation = "EXEC"
+identifier = "foobar"
+[[gets]]
+start = ["foo"]
+stop = ["bar"]
+
+[[gets]]
+start = ["baz"]
+count = 100
+
+[[puts]]
+key = ["foo"]
+value = "zoom"
+
+[[puts]]
+key = ["bar", "boom"]
+value = "thing"
+
+[[deletes]]
+start = ["baz"]
+#+END_EXAMPLE
+** Replicators
+*** Description
+Replicators implement different forms of replication of data, such as local
+strong consistency or eventual consistency.  A replicator is decided per
+operation.
+*** API
+- ~REPLICATE replicator data~ - Replicates data through a replicator.
+** Tablet Server
+*** Description
+A tablet server manages instances of tablets.  Each tablet has a replication
+factor and each replicant is owned by a distinct tablet server.  The consistency
+of a tablet and its replicants mirrors the table it is part of.
+
+The tablet server maintains an association of unique ID's to tablets.  The
+unique ID's are created externally.
+
+Tablet servers should scale to the thousands of nodes per cluster.
+*** API
+- ~EXEC id gets puts deletes opts~ - See [[#tablet-api][Tablet API]] for details on this
+  operation.
+- ~SPLIT src_tablet_id dst_tablet_id dst_tablet_id~ - Takes a tablet and splits
+  it into two, roughly equally sized, tablets.  This is done as an atomic step
+  and the source tablet is deleted at the end.  All writes to the tablet will
+  fail after.  The response contains the starting key of each tablet.
+- ~MERGE src_tablet_id src_tablet_id dst_tablet_id~ - Merge two tablets in an
+  atomic operation.  The source tablets are deleted after the operation has
+  succeeded.  The response is the starting key of the new tablet.
+- ~FETCH_TABLET tablet_id~
+- ~DELETE_TABLET tablet_id~
+- ~CREATE_TABLET tablet_id~
+- ~LIST_TABLETS~ - List all tablets the tablet server maintains and the
+  estimated size and the current leader.
+- ~ADD_PEER tablet_id host port~ - Adds a peer to the tablet identified with the
+  id.
+- ~REMOVE_PEER tablet_id host port~ - Remove a peer.
+** Tablet Coordinator
+*** Description
+The tablet coordinator is the brain behind tracking which tablet servers are
+responsible for which tablets.  It also tracks the size of tablets and makes
+decisions around merging or splitting them.
+
+Consistent hashing is used to map tablet servers to a group of tablets.  The
+tablet coordinator is responsible for maintaining this mapping.
+
+Tablet coordinators are highly available but strongly consistent, using the Raft
+algorithm to maintain state.
+*** API
+- ~GET_STATE epoch~ - Returns the difference in state of the tablet coordinator
+  since the given epoch.  The response contains the new epoch.  If no epoch is
+  given or the delta since the epoch cannot be calculated the entire state is
+  returned.
+- ~ADD_TABLET_SERVER host port~
+- ~REMOVE_TABLET_SERVER host port~
+** Router
+*** Description
+Routers are the client frontends.  They are a cache for the data in a tablet
+coordinator, periodically refreshing their state to match it.  All client
+connections go through a router and it routes the operation to the correct
+tablet server by hashing the partition key and performing a lookup in the
+mapping of hashes to tablet servers.
+
+Routers are expected to scale as needed.  They are limited by how much traffic
+they can individually handle and how much traffic the tablet servers can handle.
+
+Routers have soft state, knowingly only about the tablet coordinator.  On a
+start up they reach out to the tablet coordinator and update their state.
+*** API
+- ~EXEC id gets puts deletes opts~ - See [[#tablet-api][Tablet API]] for details on this
+  operation.
+** External Router
+*** Description
+External routers are like routers except they route between clusters.
+
+The exact implementation is unknown, it might be sufficient that they look like
+tablet servers and look to simply be another member of the cluster.
+*** API
+Unknown yet
+** Cluster Coordinator
+*** Description
+The cluster coordinator managers multiple clusters, possibly spanning multiple
+regions.
+*** API
+Unknown yet
+* Anatomy of a Request
+1. Client connects to a router and executes an ~EXEC~ operation.
+2. Router splits operations in ~EXEC~ by tablet servers.
+   1. Iterate through all operations in ~EXEC~.
+   2. Hash partition key value.
+   3. Lookup tablet server from hash using map from tablet coordinator.
+   4. Add operation to map between tablet server and operations for it.
+3. ~EXEC~ calls are issued to each tablet server in parallel (up to some limit).
+4. Each tablet server executes the ~EXEC~.
+   1. For each entry in the ~EXEC~ determine the replicator to use.
+   2. Execute ~REPLICATE~ on each replicator in parallel (up to some limit).
+      ~REPLICATE~ is synchronous.
+   3. Compile a response.
+5. Compile responses from tablet servers.
+6. Return response to client.
+* Operations
+It is important that Kaiju be as easy to operate as possible.  It has multiple
+moving parts.
+
+The design goals for operatorability are:
+
+- The system should have one entry point for all operational commands (~kaiju~).
+- Logging should be easily understood by a machine.
+- All components should track and provide a mechanism of exporting metrics.
+** Configuration
+Configuration is broken down into two broad categories: machine and cluster.
+Machine configurations are those that are specific to a machine.  For example,
+what directories to store data on disk is specific to a machine. Cluster
+configurations are those that apply to the cluster as a whole.  A specific
+cluster configuration may only affect a single machine but logically it would be
+a cluster configuration.  An example of a cluster configuration would be the
+list of tablet servers.
+
+In general, machine configurations are meant to be unchanging and relate only to
+the information specific to that machine.  Machine configurations might require
+a restart of the services to take effect.  Cluster configurations should not
+require any restart of services unless otherwise stated.
+
+Cluster configuration is maintained through a strongly consistent algorithm.  If
+the command to set a configuration option is returns successfully, it has been
+applied.
+
+Machine configurations are stored on disk.  The configuration a component is
+currently executing on can be queried at runtime.
+
+Cluster configurations are set and updated through a network interface and a
+command interface is provided that allows reading and writing to stdio.  Cluster
+configurations can be updated either as a delta over the existing configuration
+or as the entire configuration which replaces the existing one completely.
+
+Both machine and cluster configurations are represented in the same format.
+Tooling is provided to validate the configuration against a schema.  This will
+verify the values are the correct types however it does not necessarily
+guarantee a value is correct.
+* Milestones
+Milestones are broken into semantics versions where the version communications
+operational knowledge.  For example, changing a required configuration value
+would break a major but a purely performance based change would be a patch.
+High or low version numbers do not represent a level of stability or quality.
+** 1.0.0 [0/6]
+The goal of ~1.0.0~ is to successfully execute an ~EXEC~ API call as a client.
+Only a single cluster is supported and only tables with ~local strong
+consistency~ are supported.  Performance and robustness is not a requirement of
+~1.0.0~.
+*** TODO Config Files [0/3]
+- [ ] Rewrite configuration in [[https://github.com/toml-lang/toml][TOML]].  Ocaml implementation: [[https://github.com/mackwic/to.ml][to.ml]].
+- [ ] Schema validation with pluginable formats.
+- [ ] TOML backend.
+*** TODO Memory Raft Implementation [0/4]
+- [ ] Memory log backend.
+- [ ] Memory state machine.
+- [ ] TCP Transport
+- [ ] JSON communication layer
+*** TODO Memory Tablet [0/2]
+- [ ] ~EXEC~ API.
+- [ ] ~GET_SIZE~ API.
+*** TODO Tablet Server [0/5]
+- [ ] ~CREATE_TABLET~ API
+- [ ] ~ADD_PEER~ API
+- [ ] ~LIST_TABLETS~ API
+- [ ] ~EXEC~ API
+- [ ] Strongly consistent replicator
+*** TODO Tablet Coordinator [0/4]
+- [ ] Maintain a static list of tablet servers.
+- [ ] Create initial tablet with empty base key.
+- [ ] Specify tablet peers.
+- [ ] Provide ~GET_STATE~ operation.
+*** TODO Router [0/2]
+- [ ] Update state from the Tablet Coordinator.
+- [ ] Execute ~EXEC~ operations.
+
+** 1.1.0 [0/2]
+The goal of ~1.1.0~ is to make the Raft implementation more robust.  This
+includes supporting persistent storage of the log and state as well as
+supporting snapshots.
+*** TODO Support snapshots [0/2]
+- [ ] Add API for state machines loading and storing their state.
+- [ ] Periodic snapshotting
+*** TODO Persistent log [0/1]
+- [ ] LevelDB backend for logging
+** 1.2.0 [0/2]
+The goal of ~1.2.0~ is to introduce eventually consistent table types.
+*** TODO Implement CRDTs [0/3]
+- [ ] Maps
+- [ ] Sets
+- [ ] Counters
+*** TODO Gossip replicator [0/1]
+- [ ] Support gossip replication
